@@ -1,0 +1,98 @@
+protein_gene_list_query: |
+  -- For Proteins
+  WITH filtered_xref_protein AS (
+      SELECT
+          name AS xref_name,
+          title
+      FROM
+          bb_schema.bb_xref
+      WHERE
+          name LIKE 'uniprot:%'
+  ),
+  filtered_entity_protein AS (
+      SELECT
+          'protein' AS entity_type,
+          json_array_elements_text(properties::json->'xrefs') AS xref
+      FROM
+          bb_schema.bb_biological_entity
+      WHERE
+          entity_class = 'PROTEIN'
+          AND properties IS NOT NULL
+
+      UNION ALL
+
+      -- Include proteins with NULL properties
+      SELECT
+          'protein' AS entity_type,
+          NULL AS xref
+      FROM
+          bb_schema.bb_biological_entity
+      WHERE
+          entity_class = 'PROTEIN'
+          AND properties IS NULL
+  ),
+  protein_list AS (
+      SELECT
+          fe.entity_type,
+          fe.xref,
+          fx.title,
+          fx.xref_name
+      FROM
+          filtered_entity_protein fe
+      LEFT JOIN
+          filtered_xref_protein fx
+      ON
+          fx.xref_name = fe.xref
+  )
+  SELECT
+      entity_type,
+      xref,
+      title AS protein_title
+  FROM
+      protein_list;
+
+  -- For Genes
+  WITH filtered_xref_gene AS (
+      SELECT
+          name AS xref_name,
+          title
+      FROM
+          bb_schema.bb_xref
+      WHERE
+          name LIKE 'uniprot:%'
+  ),
+  filtered_entity_gene AS (
+      SELECT
+          'gene' AS entity_type,
+          TRIM(BOTH '"' FROM json_array_elements_text(properties::json->'xrefs')) AS xref
+      FROM
+          bb_schema.bb_biological_entity
+      WHERE
+          entity_class = 'GENE'
+  ),
+  gene_list AS (
+      SELECT
+          fe.entity_type,
+          fe.xref,
+          fx.title,
+          fx.xref_name
+      FROM
+          filtered_entity_gene fe
+      JOIN
+          filtered_xref_gene fx
+      ON
+          fx.xref_name = fe.xref
+  )
+  SELECT
+      entity_type,
+      xref,
+      title AS gene_title
+  FROM
+      gene_list;
+
+create_table_query: |
+  CREATE TABLE IF NOT EXISTS bb_schema.bb_protein_gene_list (
+      entity_type VARCHAR(50),
+      uniprot_id VARCHAR(255),
+      title VARCHAR(255)
+  );
